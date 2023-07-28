@@ -2,7 +2,30 @@
 
 typedef struct {
   double *data;
+  int shape[2];
+  int strides[2];
 } Matrix;
+
+Matrix matrix(double *data, int shape[2]) {
+  Matrix m;
+  m.data = data;
+  m.shape[0] = shape[0];
+  m.shape[1] = shape[1];
+  if (m.shape[0] < m.shape[1]) {
+    m.strides[0] = m.shape[1];
+    m.strides[1] = 1;
+  } else {
+    m.strides[0] = m.shape[1];
+    m.strides[1] = 1;
+  }
+  return m;
+}
+
+double getMatrix(Matrix m, int i, int j) {
+  return m.data[i * m.strides[0] + j * m.strides[1]];
+}
+
+void printShape(Matrix c) { printf("shape (%d, %d)", c.shape[0], c.shape[1]); }
 
 double dot(Matrix a, Matrix b, int length) {
   double summed = 0.0;
@@ -12,19 +35,20 @@ double dot(Matrix a, Matrix b, int length) {
   return summed;
 }
 
-int main() {
-  Matrix a;
-  Matrix b;
-  double data[3] = {1., 2., 4.};
-
-  a.data = data;
-  b.data = data;
-
-  for (int i = 0; i < 3; i++) {
-    printf("%f ", a.data[i]);
+void printMatrix(Matrix a) {
+  for (int i = 0; i < a.shape[0]; i++) {
+    for (int j = 0; j < a.shape[1]; j++) {
+      printf("%f ", getMatrix(a, i, j));
+    }
+    printf("\n");
   }
+}
 
-  printf("Dot product with a and b = %f", dot(a, b, 3));
+int main() {
+  double data[6] = {0., 1., 2., 3., 4., 5.};
+
+  Matrix a = matrix(data, (int[]){2, 3});
+  printMatrix(a);
 
   return 0;
 }
