@@ -38,15 +38,6 @@ void addEqualMatrix(Matrix *m, int i, int j, double value) {
 
 void printShape(Matrix c) { printf("shape (%d, %d)", c.shape[0], c.shape[1]); }
 
-double dot(Matrix a, Matrix b) {
-  assert(a.shape[1] == b.shape[0]);
-  double summed = 0.0;
-  for (int i = 0; i < a.shape[1]; i++) {
-    summed += getMatrix(a, 0, i) * getMatrix(b, i, 0);
-  }
-  return summed;
-}
-
 void matmul(Matrix a, Matrix b, Matrix *out) {
   int m = a.shape[0];
   int inner = b.shape[0];
@@ -58,6 +49,15 @@ void matmul(Matrix a, Matrix b, Matrix *out) {
       }
     }
   }
+}
+
+double dot(Matrix a, Matrix b) {
+  assert(a.shape[1] == b.shape[0]);
+  assert(a.shape[0] == 1 && b.shape[1] == 1);
+  double output[1] = {0.0};
+  Matrix out = matrix(output, (int[]){1, 1});
+  matmul(a, b, &out);
+  return out.data[0];
 }
 
 Matrix reshape(Matrix m, int shape[2]) {
@@ -80,16 +80,25 @@ int main() {
   double data[6] = {0., 1., 2., 3., 4., 5.};
   double output[9] = {0.0};
 
+  // matrix matrix multiply
   Matrix a = matrix(data, (int[]){3, 2});
   Matrix b = matrix(data, (int[]){2, 3});
   Matrix out = matrix(output, (int[]){3, 3});
-
   printMatrix(a);
   printf("@\n");
   printMatrix(b);
   printf("=\n");
   matmul(a, b, &out);
   printMatrix(out);
+
+  // vector vector dot product
+  Matrix u = matrix(data, (int[]){1, 6});
+  Matrix v = reshape(u, (int[]){6, 1});
+  printMatrix(u);
+  printf("@\n");
+  printMatrix(v);
+  printf("=\n");
+  printf("%f", dot(u, v));
 
   return 0;
 }
