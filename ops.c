@@ -104,12 +104,9 @@ void printMatrix(Matrix a) {
   }
 }
 
-void relu(Matrix *m) {
-#pragma omp parallel for
-  for (int i = 0; i < m->shape[0] * m->shape[1]; i++) {
-    if (m->data[i] <= 0.0) {
-      m->data[i] = 0.0;
-    }
+void relu(Matrix m) {
+  for (int i = 0; i < m.shape[0] * m.shape[1]; i++) {
+    m.data[i] = m.data[i] < 0. ? 0. : m.data[i];
   }
 }
 
@@ -127,6 +124,7 @@ int main() {
 
     double start = omp_get_wtime();
     matmul(a, b, out);
+    relu(out);
     double end = omp_get_wtime();
     times += (end - start);
   }
