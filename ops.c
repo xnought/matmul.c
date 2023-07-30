@@ -124,7 +124,6 @@ int main() {
 
     double start = omp_get_wtime();
     matmul(a, b, out);
-    relu(out);
     double end = omp_get_wtime();
     times += (end - start);
   }
