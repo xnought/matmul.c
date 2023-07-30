@@ -26,12 +26,12 @@ void matmul(Matrix a, Matrix b, Matrix out) {
 For a 1 million item matrix multiply (1000x1000) multiplied by (1000x1000) output I get the following average performance on a few runs
 
 ```txt
-time 0.968932
-megaflops 1032.064596
-gigaflops 1.032065
+time 0.187500
+megaflops 5333.333333
+gigaflops 5.333333
 ```
 
-Which is fast for my computer! Without openmp and simd, it took ~20+ seconds for the one matmul!!
+Which is really darn fast for my computer!  
 
 Check what `Matrix` struct looks like in [`ops.c`](ops.c).
 
