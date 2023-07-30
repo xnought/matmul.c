@@ -38,5 +38,5 @@ gigaflops 0.966038```
 
 Which is really darn fast for my computer! With just OpenMP parallel I get a 3x speedup, with just OpenMP SIMD I get a 2x speedup. Together,as you can see above I get a 5x speedup over regular.
 
-Check what `Matrix` struct looks like in [`ops.c`](ops.c).
+Check what `Matrix` struct looks like in [`matmul.c`](matmul.c).
 
