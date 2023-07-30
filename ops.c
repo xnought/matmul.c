@@ -44,6 +44,22 @@ void addEqualMatrix(Matrix *m, int i, int j, float_t value) {
 
 void printShape(Matrix c) { printf("shape (%d, %d)", c.shape[0], c.shape[1]); }
 
+void unoptimizedmatmul(Matrix a, Matrix b, Matrix out) {
+  int m = a.shape[0];
+  int inner = b.shape[0];
+  int n = b.shape[1];
+
+  for (int k = 0; k < m; k++) {
+    for (int j = 0; j < n; j++) {
+      for (int i = 0; i < inner; i++) {
+        out.data[out.strides[0] * k + out.strides[1] * j] +=
+            b.data[b.strides[0] * i + b.strides[1] * j] *
+            a.data[a.strides[0] * k + a.strides[1] * i];
+      }
+    }
+  }
+}
+
 // optimized out the wazoo
 void matmul(Matrix a, Matrix b, Matrix out) {
   int m = a.shape[0];
@@ -106,32 +122,61 @@ void relu(Matrix m) {
 
 #define TOTAL_SIZE 1000000
 int main() {
+  {
+    float_t times = 0.0;
+    int runs = 1;
+    int dimension = (int)sqrt(TOTAL_SIZE);
+    for (int i = 0; i < runs; i++) {
+      float_t dataA[TOTAL_SIZE] = {0.0};
+      float_t dataB[TOTAL_SIZE] = {0.0};
+      float_t output[TOTAL_SIZE] = {0.0};
+      randomData(dataA, TOTAL_SIZE);
+      randomData(dataB, TOTAL_SIZE);
 
-  // matrix matrix multiply
-  // there are m^3 operations for an mxm matrix multiple with mxm other matrix.
-  float_t times = 0.0;
-  int runs = 1;
-  int dimension = (int)sqrt(TOTAL_SIZE);
-  for (int i = 0; i < runs; i++) {
-    float_t dataA[TOTAL_SIZE] = {0.0};
-    float_t dataB[TOTAL_SIZE] = {0.0};
-    float_t output[TOTAL_SIZE] = {0.0};
-    randomData(dataA, TOTAL_SIZE);
-    randomData(dataB, TOTAL_SIZE);
+      int shape[2] = {dimension, dimension};
+      Matrix a = matrix(dataA, shape);
+      Matrix b = matrix(dataB, shape);
+      Matrix out = matrix(output, shape);
 
-    int shape[2] = {dimension, dimension};
-    Matrix a = matrix(dataA, shape);
-    Matrix b = matrix(dataB, shape);
-    Matrix out = matrix(output, shape);
-
-    float_t start = omp_get_wtime();
-    matmul(a, b, out);
-    float_t end = omp_get_wtime();
-    times += (end - start);
+      float_t start = omp_get_wtime();
+      matmul(a, b, out);
+      float_t end = omp_get_wtime();
+      times += (end - start);
+    }
+    printf("OpenMP + SIMD Matmul\n");
+    printf("time %f\n", times / runs);
+    printf("megaflops %f\n", (pow(dimension, 3) / (times / runs)) / 1e6);
+    printf("gigaflops %f", (pow(dimension, 3) / (times / runs)) / 1e9);
   }
-  printf("time %f\n", times / runs);
-  printf("megaflops %f\n", (pow(dimension, 3) / (times / runs)) / 1e6);
-  printf("gigaflops %f", (pow(dimension, 3) / (times / runs)) / 1e9);
+
+  printf("\n\n");
+
+  {
+    float_t times = 0.0;
+    int runs = 1;
+    int dimension = (int)sqrt(TOTAL_SIZE);
+    for (int i = 0; i < runs; i++) {
+      float_t dataA[TOTAL_SIZE] = {0.0};
+      float_t dataB[TOTAL_SIZE] = {0.0};
+      float_t output[TOTAL_SIZE] = {0.0};
+      randomData(dataA, TOTAL_SIZE);
+      randomData(dataB, TOTAL_SIZE);
+
+      int shape[2] = {dimension, dimension};
+      Matrix a = matrix(dataA, shape);
+      Matrix b = matrix(dataB, shape);
+      Matrix out = matrix(output, shape);
+
+      float_t start = omp_get_wtime();
+      unoptimizedmatmul(a, b, out);
+      float_t end = omp_get_wtime();
+      times += (end - start);
+    }
+    printf("Regular Matmul\n");
+    printf("time %f\n", times / runs);
+    printf("megaflops %f\n", (pow(dimension, 3) / (times / runs)) / 1e6);
+    printf("gigaflops %f", (pow(dimension, 3) / (times / runs)) / 1e9);
+  }
 
   return 0;
 }
