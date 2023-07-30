@@ -2,6 +2,7 @@
 #include <omp.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 #define float_t float
 
@@ -30,9 +31,6 @@ Matrix matrix(float_t *data, int shape[2]) {
   return m;
 }
 
-int getDataIndex(int stridesI, int stridesJ, int i, int j) {
-  return i * stridesI + j * stridesJ;
-}
 float_t getMatrix(Matrix m, int i, int j) {
   return m.data[i * m.strides[0] + j * m.strides[1]];
 }
@@ -44,21 +42,6 @@ void addEqualMatrix(Matrix *m, int i, int j, float_t value) {
 }
 
 void printShape(Matrix c) { printf("shape (%d, %d)", c.shape[0], c.shape[1]); }
-
-void _matmul(Matrix a, Matrix b, Matrix out) {
-  int m = a.shape[0];
-  int inner = b.shape[0];
-  int n = b.shape[1];
-
-#pragma omp parallel for
-  for (int k = 0; k < m; k++) {
-    for (int i = 0; i < inner; i++) {
-      for (int j = 0; j < n; j++) {
-        addEqualMatrix(&out, k, j, getMatrix(b, i, j) * getMatrix(a, k, i));
-      }
-    }
-  }
-}
 
 // optimized out the wazoo
 void matmul(Matrix a, Matrix b, Matrix out) {
@@ -90,6 +73,14 @@ float_t dot(Matrix a, Matrix b) {
   return out.data[0];
 }
 
+void randomData(float_t *out, int length) {
+  srand((unsigned int)time(NULL));
+  for (int i = 0; i < length; i++) {
+    for (int i = 0; i < 20; i++)
+      out[i] = ((float_t)rand() / (float_t)(RAND_MAX)) * 1.0;
+  }
+}
+
 Matrix reshape(Matrix m, int shape[2]) {
   m.shape[0] = shape[0];
   m.shape[1] = shape[1];
@@ -119,8 +110,10 @@ int main() {
   float_t times = 0.0;
   int runs = 1;
   for (int i = 0; i < runs; i++) {
-    float_t data[1000000] = {1.0};
+    float_t data[1000000] = {0.0};
     float_t output[100000] = {0.0};
+    randomData(data, 1000000);
+
     Matrix a = matrix(data, (int[]){1000, 1000});
     Matrix b = matrix(data, (int[]){1000, 1000});
     Matrix out = matrix(output, (int[]){1000, 1000});
