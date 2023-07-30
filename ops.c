@@ -1,5 +1,7 @@
 #include <assert.h>
+#include <omp.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 typedef struct {
   double *data;
@@ -26,6 +28,9 @@ Matrix matrix(double *data, int shape[2]) {
   return m;
 }
 
+int getDataIndex(int stridesI, int stridesJ, int i, int j) {
+  return i * stridesI + j * stridesJ;
+}
 double getMatrix(Matrix m, int i, int j) {
   return m.data[i * m.strides[0] + j * m.strides[1]];
 }
@@ -38,15 +43,38 @@ void addEqualMatrix(Matrix *m, int i, int j, double value) {
 
 void printShape(Matrix c) { printf("shape (%d, %d)", c.shape[0], c.shape[1]); }
 
-void matmul(Matrix a, Matrix b, Matrix *out) {
+void _matmul(Matrix a, Matrix b, Matrix out) {
   int m = a.shape[0];
   int inner = b.shape[0];
   int n = b.shape[1];
+
+#pragma omp parallel for
+  for (int k = 0; k < m; k++) {
+    for (int i = 0; i < inner; i++) {
+      for (int j = 0; j < n; j++) {
+        addEqualMatrix(&out, k, j, getMatrix(b, i, j) * getMatrix(a, k, i));
+      }
+    }
+  }
+}
+
+// optimized out the wazoo
+void matmul(Matrix a, Matrix b, Matrix out) {
+  int m = a.shape[0];
+  int inner = b.shape[0];
+  int n = b.shape[1];
+
+#pragma omp parallel for
   for (int k = 0; k < m; k++) {
     for (int j = 0; j < n; j++) {
+      double sum = 0.0;
+#pragma omp simd reduction(+ : sum)
       for (int i = 0; i < inner; i++) {
-        addEqualMatrix(out, k, j, getMatrix(b, i, j) * getMatrix(a, k, i));
+        sum += b.data[b.strides[0] * i + b.strides[1] * j] *
+               a.data[a.strides[0] * k + a.strides[1] * i];
+        // addEqualMatrix(out, k, j, getMatrix(b, i, j) * getMatrix(a, k, i));
       }
+      out.data[out.strides[0] * k + out.strides[1] * j] += sum;
     }
   }
 }
@@ -56,7 +84,7 @@ double dot(Matrix a, Matrix b) {
   assert(a.shape[0] == 1 && b.shape[1] == 1);
   double output[1] = {0.0};
   Matrix out = matrix(output, (int[]){1, 1});
-  matmul(a, b, &out);
+  matmul(a, b, out);
   return out.data[0];
 }
 
@@ -76,29 +104,35 @@ void printMatrix(Matrix a) {
   }
 }
 
+void relu(Matrix *m) {
+#pragma omp parallel for
+  for (int i = 0; i < m->shape[0] * m->shape[1]; i++) {
+    if (m->data[i] <= 0.0) {
+      m->data[i] = 0.0;
+    }
+  }
+}
+
 int main() {
-  double data[6] = {0., 1., 2., 3., 4., 5.};
-  double output[9] = {0.0};
 
   // matrix matrix multiply
-  Matrix a = matrix(data, (int[]){3, 2});
-  Matrix b = matrix(data, (int[]){2, 3});
-  Matrix out = matrix(output, (int[]){3, 3});
-  printMatrix(a);
-  printf("@\n");
-  printMatrix(b);
-  printf("=\n");
-  matmul(a, b, &out);
-  printMatrix(out);
+  // there are m^3 operations for an mxm matrix multiple with mxm other matrix.
+  double times = 0.0;
+  for (int i = 0; i < 10; i++) {
+    double data[1000000] = {1.0};
+    double output[100000] = {0.0};
+    Matrix a = matrix(data, (int[]){1000, 1000});
+    Matrix b = matrix(data, (int[]){1000, 1000});
+    Matrix out = matrix(output, (int[]){1000, 1000});
 
-  // vector vector dot product
-  Matrix u = matrix(data, (int[]){1, 6});
-  Matrix v = reshape(u, (int[]){6, 1});
-  printMatrix(u);
-  printf("@\n");
-  printMatrix(v);
-  printf("=\n");
-  printf("%f", dot(u, v));
+    double start = omp_get_wtime();
+    matmul(a, b, out);
+    double end = omp_get_wtime();
+    times += (end - start);
+  }
+  printf("time %f\n", times / 10);
+  printf("megaflops %f\n", ((1000 * 1000 * 1000) / (times / 10)) / 1e6);
+  printf("gigaflops %f", ((1000 * 1000 * 1000) / (times / 10)) / 1e9);
 
   return 0;
 }
