@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <math.h>
 #include <omp.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -103,20 +104,25 @@ void relu(Matrix m) {
   }
 }
 
+#define TOTAL_SIZE 1000000
 int main() {
 
   // matrix matrix multiply
   // there are m^3 operations for an mxm matrix multiple with mxm other matrix.
   float_t times = 0.0;
   int runs = 1;
+  int dimension = (int)sqrt(TOTAL_SIZE);
   for (int i = 0; i < runs; i++) {
-    float_t data[1000000] = {0.0};
-    float_t output[100000] = {0.0};
-    randomData(data, 1000000);
+    float_t dataA[TOTAL_SIZE] = {0.0};
+    float_t dataB[TOTAL_SIZE] = {0.0};
+    float_t output[TOTAL_SIZE] = {0.0};
+    randomData(dataA, TOTAL_SIZE);
+    randomData(dataB, TOTAL_SIZE);
 
-    Matrix a = matrix(data, (int[]){1000, 1000});
-    Matrix b = matrix(data, (int[]){1000, 1000});
-    Matrix out = matrix(output, (int[]){1000, 1000});
+    int shape[2] = {dimension, dimension};
+    Matrix a = matrix(dataA, shape);
+    Matrix b = matrix(dataB, shape);
+    Matrix out = matrix(output, shape);
 
     float_t start = omp_get_wtime();
     matmul(a, b, out);
@@ -124,8 +130,8 @@ int main() {
     times += (end - start);
   }
   printf("time %f\n", times / runs);
-  printf("megaflops %f\n", ((1000 * 1000 * 1000) / (times / runs)) / 1e6);
-  printf("gigaflops %f", ((1000 * 1000 * 1000) / (times / runs)) / 1e9);
+  printf("megaflops %f\n", (pow(dimension, 3) / (times / runs)) / 1e6);
+  printf("gigaflops %f", (pow(dimension, 3) / (times / runs)) / 1e9);
 
   return 0;
 }
