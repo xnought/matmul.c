@@ -1,7 +1,12 @@
-all: build run 
+FILE=matmul.c
+CC=gcc-12
+all: build-optimized run 
 
 build:
-	@gcc-12 ops.c -fopenmp -O3 -lm
+	@$(CC) $(FILE) -fopenmp -lm -o matmul
+
+build-optimized:
+	@$(CC) $(FILE) -fopenmp -O3 -lm -o matmul
 
 run:
-	@./a.out
+	@./matmul
