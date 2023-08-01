@@ -45,11 +45,12 @@ void unoptimizedmatmul(Matrix a, Matrix b, Matrix out) {
 
   for (int k = 0; k < m; k++) {
     for (int j = 0; j < n; j++) {
+      float_t sum = 0.0;
       for (int i = 0; i < inner; i++) {
-        out.data[out.strides[0] * k + out.strides[1] * j] +=
-            b.data[b.strides[0] * i + b.strides[1] * j] *
-            a.data[a.strides[0] * k + a.strides[1] * i];
+        sum += b.data[b.strides[0] * i + b.strides[1] * j] *
+               a.data[a.strides[0] * k + a.strides[1] * i];
       }
+      out.data[out.strides[0] * k + out.strides[1] * j] = sum;
     }
   }
 }
@@ -150,30 +151,24 @@ void relu(Matrix m) {
   }
 }
 
-void addMul(Matrix a, float_t scaled, Matrix out) {
-  for (int i = 0; i < a.shape[0]; i++) {
-    for (int j = 0; j < a.shape[1]; j++) {
-      int index = a.offset + i * a.strides[0] + j * a.strides[1];
-      out.data[index] += a.data[index] * scaled;
-    }
-  }
+void columnMulAdd(Matrix a, float_t scaled, Matrix out) {
+#pragma omp simd
+  for (int i = 0; i < out.shape[0]; i++)
+    out.data[out.offset + out.strides[0] * i] +=
+        scaled * a.data[a.offset + a.strides[0] * i];
 }
 
 void reshapematmul(Matrix a, Matrix b, Matrix out) {
-  // separate the columns of b with the a matrix
+  // Separate into matrix vector mult
+#pragma omp parallel for
   for (int i = 0; i < b.shape[1]; i++) {
     Matrix bCol = columnSlice(b, i);
     Matrix outCol = columnSlice(out, i);
-
+    // Separate into scalar times vector summed
     for (int j = 0; j < b.shape[0]; j++) {
-      float_t bVal = bCol.data[bCol.offset + i * bCol.strides[0]];
+      float_t bVal = getMatrix(bCol, j, 0);
       Matrix aCol = columnSlice(a, j);
-      printf("\n");
-      printf("%f\n", bVal);
-      printMatrix(aCol);
-      printf("\n");
-
-      addMul(aCol, bVal, outCol);
+      columnMulAdd(aCol, bVal, outCol);
     }
   }
 }
@@ -235,6 +230,33 @@ void matmulSpeedTest() {
     printf("megaflops %f\n", (pow(dimension, 3) / (times / runs)) / 1e6);
     printf("gigaflops %f", (pow(dimension, 3) / (times / runs)) / 1e9);
   }
+
+  {
+    float_t times = 0.0;
+    int runs = 1;
+    int dimension = (int)sqrt(TOTAL_SIZE);
+    for (int i = 0; i < runs; i++) {
+      float_t dataA[TOTAL_SIZE] = {0.0};
+      float_t dataB[TOTAL_SIZE] = {0.0};
+      float_t output[TOTAL_SIZE] = {0.0};
+      randomData(dataA, TOTAL_SIZE);
+      randomData(dataB, TOTAL_SIZE);
+
+      int shape[2] = {dimension, dimension};
+      Matrix a = matrix(dataA, shape);
+      Matrix b = matrix(dataB, shape);
+      Matrix out = matrix(output, shape);
+
+      float_t start = omp_get_wtime();
+      reshapematmul(a, b, out);
+      float_t end = omp_get_wtime();
+      times += (end - start);
+    }
+    printf("\n\nReshape Matmul\n");
+    printf("time %f\n", times / runs);
+    printf("megaflops %f\n", (pow(dimension, 3) / (times / runs)) / 1e6);
+    printf("gigaflops %f", (pow(dimension, 3) / (times / runs)) / 1e9);
+  }
 }
 
 float performSimdSum(float *inputArray, int arraySize) {
@@ -243,11 +265,12 @@ float performSimdSum(float *inputArray, int arraySize) {
 
   // Outer for loop to process elements in SIMD chunks.
   for (int i = 0; i < arraySize; i += simdSize) {
-    // Use inline assembly to load and sum the elements in SIMD registers (SSE).
+    // Use inline assembly to load and sum the elements in SIMD registers
+    // (SSE).
     __asm__("movups (%0), %%xmm0\n"   // Load 4 floats from inputArray into xmm0
                                       // register.
-            "haddps %%xmm0, %%xmm0\n" // Sum the first 2 floats, and the last 2
-                                      // floats in xmm0.
+            "haddps %%xmm0, %%xmm0\n" // Sum the first 2 floats, and the last
+                                      // 2 floats in xmm0.
             "haddps %%xmm0, %%xmm0\n" // Sum all 4 floats in xmm0.
             "movss %%xmm0, %1\n"      // Store the sum in the sum variable.
             :
@@ -270,7 +293,8 @@ float __asm_dot(float *a, float *b, int arraySize) {
 
   // Outer for loop to process elements in SIMD chunks.
   for (int i = 0; i < arraySize; i += simdSize) {
-    // Use inline assembly to load and sum the elements in SIMD registers (SSE).
+    // Use inline assembly to load and sum the elements in SIMD registers
+    // (SSE).
     __asm__("movups (%1), %%xmm0\n" // Load 4 floats from inputArray into xmm0
             "movups (%2), %%xmm1\n" // Load 4 floats from inputArray into xmm0
             "mulps %%xmm1, %%xmm0\n"
@@ -293,11 +317,6 @@ void asmTest() {
 }
 
 int main() {
-  float_t data[] = {0.0, 1.0, 2.0, 3.0};
-  float_t out[] = {0.0, 0.0, 0.0, 0.0};
-  Matrix a = matrix(data, (int[]){2, 2});
-  Matrix output = matrix(out, (int[]){2, 2});
-  reshapematmul(a, a, output);
-  printMatrix(output);
+  matmulSpeedTest();
   return 0;
 }
