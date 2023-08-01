@@ -11,35 +11,29 @@ typedef struct {
   float_t *data;
   int shape[2];
   int strides[2];
+  int offset;
 } Matrix;
-
-void updateStrides(Matrix *m) {
-  if (m->shape[0] <= m->shape[1]) {
-    m->strides[0] = m->shape[1];
-    m->strides[1] = 1;
-  } else {
-    m->strides[0] = m->shape[1];
-    m->strides[1] = 1;
-  }
-}
 
 Matrix matrix(float_t *data, int shape[2]) {
   Matrix m;
   m.data = data;
+
   m.shape[0] = shape[0];
   m.shape[1] = shape[1];
-  updateStrides(&m);
+
+  m.strides[0] = m.shape[1];
+  m.strides[1] = 1;
+
+  m.offset = 0;
+
   return m;
 }
 
+int dataIndex(Matrix *m, int i, int j) {
+  return m->offset + i * m->strides[0] + j * m->strides[1];
+}
 float_t getMatrix(Matrix m, int i, int j) {
-  return m.data[i * m.strides[0] + j * m.strides[1]];
-}
-void setMatrix(Matrix *m, int i, int j, float_t value) {
-  m->data[i * m->strides[0] + j * m->strides[1]] = value;
-}
-void addEqualMatrix(Matrix *m, int i, int j, float_t value) {
-  m->data[i * m->strides[0] + j * m->strides[1]] += value;
+  return m.data[dataIndex(&m, i, j)];
 }
 
 void printShape(Matrix c) { printf("shape (%d, %d)", c.shape[0], c.shape[1]); }
@@ -122,7 +116,22 @@ void randomData(float_t *out, int length) {
 Matrix reshape(Matrix m, int shape[2]) {
   m.shape[0] = shape[0];
   m.shape[1] = shape[1];
-  updateStrides(&m);
+
+  m.strides[0] = m.shape[1];
+  m.strides[1] = 1;
+
+  return m;
+}
+
+Matrix columnSlice(Matrix m, int column) {
+  m.strides[0] = m.shape[1];
+  m.strides[1] = 1;
+
+  m.shape[0] = m.shape[0];
+  m.shape[1] = 1;
+
+  m.offset = column;
+
   return m;
 }
 
@@ -141,98 +150,92 @@ void relu(Matrix m) {
   }
 }
 
-float summed(float *a, float *b) {
-  float sum[4];
-  // Inline assembly for SIMD addition using SSE instructions
-  __asm__("movups %1, %%xmm0\n"    // Load elements from 'a' into xmm0
-          "movups %2, %%xmm1\n"    // Load elements from 'b' into xmm1
-          "addps %%xmm1, %%xmm0\n" // Perform SIMD addition xmm0 += xmm1
-          "movups %%xmm0, %0\n"    // Store result back to 'sum'
-          : "+x"(sum) // Output operand: 'sum' will be stored in memory
-          : "x"(&a[0]), "x"(&b[0])
-          : "%xmm0",
-            "%xmm1" // Clobbered registers: xmm0 and xmm1 are used and modified
-  );
-
-  // Print the result
-  for (int i = 0; i < 4; i++) {
-    printf("Sum[%d]: %f\n", i, sum[i]);
+void addMul(Matrix a, float_t scaled, Matrix out) {
+  for (int i = 0; i < a.shape[0]; i++) {
+    for (int j = 0; j < a.shape[1]; j++) {
+      int index = a.offset + i * a.strides[0] + j * a.strides[1];
+      out.data[index] += a.data[index] * scaled;
+    }
   }
-  return 0.0;
+}
+
+void reshapematmul(Matrix a, Matrix b, Matrix out) {
+  // separate the columns of b with the a matrix
+  for (int i = 0; i < b.shape[1]; i++) {
+    Matrix bCol = columnSlice(b, i);
+    Matrix outCol = columnSlice(out, i);
+
+    for (int j = 0; j < b.shape[0]; j++) {
+      float_t bVal = bCol.data[bCol.offset + i * bCol.strides[0]];
+      Matrix aCol = columnSlice(a, j);
+      printf("\n");
+      printf("%f\n", bVal);
+      printMatrix(aCol);
+      printf("\n");
+
+      addMul(aCol, bVal, outCol);
+    }
+  }
 }
 
 #define TOTAL_SIZE 1000000
-#define TEST 0
-/*
-int main() {
-  if (TEST) {
-    {
-      float_t times = 0.0;
-      int runs = 1;
-      int dimension = (int)sqrt(TOTAL_SIZE);
-      for (int i = 0; i < runs; i++) {
-        float_t dataA[TOTAL_SIZE] = {0.0};
-        float_t dataB[TOTAL_SIZE] = {0.0};
-        float_t output[TOTAL_SIZE] = {0.0};
-        randomData(dataA, TOTAL_SIZE);
-        randomData(dataB, TOTAL_SIZE);
+void matmulSpeedTest() {
+  {
+    float_t times = 0.0;
+    int runs = 1;
+    int dimension = (int)sqrt(TOTAL_SIZE);
+    for (int i = 0; i < runs; i++) {
+      float_t dataA[TOTAL_SIZE] = {0.0};
+      float_t dataB[TOTAL_SIZE] = {0.0};
+      float_t output[TOTAL_SIZE] = {0.0};
+      randomData(dataA, TOTAL_SIZE);
+      randomData(dataB, TOTAL_SIZE);
 
-        int shape[2] = {dimension, dimension};
-        Matrix a = matrix(dataA, shape);
-        Matrix b = matrix(dataB, shape);
-        Matrix out = matrix(output, shape);
+      int shape[2] = {dimension, dimension};
+      Matrix a = matrix(dataA, shape);
+      Matrix b = matrix(dataB, shape);
+      Matrix out = matrix(output, shape);
 
-        float_t start = omp_get_wtime();
-        matmul(a, b, out);
-        float_t end = omp_get_wtime();
-        times += (end - start);
-      }
-      printf("OpenMP + SIMD Matmul\n");
-      printf("time %f\n", times / runs);
-      printf("megaflops %f\n", (pow(dimension, 3) / (times / runs)) / 1e6);
-      printf("gigaflops %f", (pow(dimension, 3) / (times / runs)) / 1e9);
+      float_t start = omp_get_wtime();
+      matmul(a, b, out);
+      float_t end = omp_get_wtime();
+      times += (end - start);
     }
-
-    printf("\n\n");
-
-    {
-      float_t times = 0.0;
-      int runs = 1;
-      int dimension = (int)sqrt(TOTAL_SIZE);
-      for (int i = 0; i < runs; i++) {
-        float_t dataA[TOTAL_SIZE] = {0.0};
-        float_t dataB[TOTAL_SIZE] = {0.0};
-        float_t output[TOTAL_SIZE] = {0.0};
-        randomData(dataA, TOTAL_SIZE);
-        randomData(dataB, TOTAL_SIZE);
-
-        int shape[2] = {dimension, dimension};
-        Matrix a = matrix(dataA, shape);
-        Matrix b = matrix(dataB, shape);
-        Matrix out = matrix(output, shape);
-
-        float_t start = omp_get_wtime();
-        unoptimizedmatmul(a, b, out);
-        float_t end = omp_get_wtime();
-        times += (end - start);
-      }
-      printf("Regular Matmul\n");
-      printf("time %f\n", times / runs);
-      printf("megaflops %f\n", (pow(dimension, 3) / (times / runs)) / 1e6);
-      printf("gigaflops %f", (pow(dimension, 3) / (times / runs)) / 1e9);
-    }
-  } else {
-
-#define ARRAY_SIZE 4
-    float a[ARRAY_SIZE] = {3.14, 2.71, 1.23, 4.56};
-    float b[ARRAY_SIZE] = {1.0, 2.0, 3.0, 4.0};
-    float sum[ARRAY_SIZE] = {0.0, 0.0, 0.0, 0.0};
-    summed(a, b);
+    printf("OpenMP + SIMD Matmul\n");
+    printf("time %f\n", times / runs);
+    printf("megaflops %f\n", (pow(dimension, 3) / (times / runs)) / 1e6);
+    printf("gigaflops %f", (pow(dimension, 3) / (times / runs)) / 1e9);
   }
 
-  return 0;
+  printf("\n\n");
+
+  {
+    float_t times = 0.0;
+    int runs = 1;
+    int dimension = (int)sqrt(TOTAL_SIZE);
+    for (int i = 0; i < runs; i++) {
+      float_t dataA[TOTAL_SIZE] = {0.0};
+      float_t dataB[TOTAL_SIZE] = {0.0};
+      float_t output[TOTAL_SIZE] = {0.0};
+      randomData(dataA, TOTAL_SIZE);
+      randomData(dataB, TOTAL_SIZE);
+
+      int shape[2] = {dimension, dimension};
+      Matrix a = matrix(dataA, shape);
+      Matrix b = matrix(dataB, shape);
+      Matrix out = matrix(output, shape);
+
+      float_t start = omp_get_wtime();
+      unoptimizedmatmul(a, b, out);
+      float_t end = omp_get_wtime();
+      times += (end - start);
+    }
+    printf("Regular Matmul\n");
+    printf("time %f\n", times / runs);
+    printf("megaflops %f\n", (pow(dimension, 3) / (times / runs)) / 1e6);
+    printf("gigaflops %f", (pow(dimension, 3) / (times / runs)) / 1e9);
+  }
 }
-  */
 
 float performSimdSum(float *inputArray, int arraySize) {
   int simdSize = 4; // 4 floats at a time for SSE.
@@ -280,33 +283,21 @@ float __asm_dot(float *a, float *b, int arraySize) {
   return result;
 }
 
-void __asm_matmul(Matrix a, Matrix b, Matrix out) {
-  int m = a.shape[0];
-  int inner = b.shape[0];
-  int n = b.shape[1];
-
-#pragma omp parallel for
-  for (int k = 0; k < m; k++) {
-    for (int j = 0; j < n; j++) {
-      float_t sum = 0.0;
-#pragma omp simd reduction(+ : sum)
-      for (int i = 0; i < inner; i++) {
-        sum += b.data[b.strides[0] * i + b.strides[1] * j] *
-               a.data[a.strides[0] * k + a.strides[1] * i];
-        // addEqualMatrix(out, k, j, getMatrix(b, i, j) * getMatrix(a, k, i));
-      }
-      out.data[out.strides[0] * k + out.strides[1] * j] += sum;
-    }
-  }
-}
-
-int main() {
+void asmTest() {
   float a[] = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f};
   float b[] = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f};
   int arraySize = sizeof(a) / sizeof(float);
 
   float sum = __asm_dot(a, b, arraySize);
   printf("Sum: %f\n", sum);
+}
 
+int main() {
+  float_t data[] = {0.0, 1.0, 2.0, 3.0};
+  float_t out[] = {0.0, 0.0, 0.0, 0.0};
+  Matrix a = matrix(data, (int[]){2, 2});
+  Matrix output = matrix(out, (int[]){2, 2});
+  reshapematmul(a, a, output);
+  printMatrix(output);
   return 0;
 }

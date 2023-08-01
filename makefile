@@ -1,6 +1,6 @@
 FILE=matmul.c
 CC=gcc-12
-all: build-asm run 
+all: build run 
 
 build:
 	@$(CC) $(FILE) -fopenmp -lm -o matmul
