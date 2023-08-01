@@ -47,10 +47,10 @@ void unoptimizedmatmul(Matrix a, Matrix b, Matrix out) {
     for (int j = 0; j < n; j++) {
       float_t sum = 0.0;
       for (int i = 0; i < inner; i++) {
-        sum += b.data[b.strides[0] * i + b.strides[1] * j] *
-               a.data[a.strides[0] * k + a.strides[1] * i];
+        sum += b.data[b.offset + b.strides[0] * i + b.strides[1] * j] *
+               a.data[a.offset + a.strides[0] * k + a.strides[1] * i];
       }
-      out.data[out.strides[0] * k + out.strides[1] * j] = sum;
+      out.data[out.offset + out.strides[0] * k + out.strides[1] * j] = sum;
     }
   }
 }
@@ -67,11 +67,10 @@ void matmul(Matrix a, Matrix b, Matrix out) {
       float_t sum = 0.0;
 #pragma omp simd reduction(+ : sum)
       for (int i = 0; i < inner; i++) {
-        sum += b.data[b.strides[0] * i + b.strides[1] * j] *
-               a.data[a.strides[0] * k + a.strides[1] * i];
-        // addEqualMatrix(out, k, j, getMatrix(b, i, j) * getMatrix(a, k, i));
+        sum += b.data[b.offset + b.strides[0] * i + b.strides[1] * j] *
+               a.data[a.offset + a.strides[0] * k + a.strides[1] * i];
       }
-      out.data[out.strides[0] * k + out.strides[1] * j] += sum;
+      out.data[out.offset + out.strides[0] * k + out.strides[1] * j] += sum;
     }
   }
 }

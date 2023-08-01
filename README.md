@@ -27,14 +27,14 @@ However, if I use the `OFast` compiler flag and `march` native for SIMD, the uno
 gcc-12 -Ofast -fopenmp -march=native matmul.c  -lm  -o matmul
 
 OpenMP + SIMD Matmul
-time 0.183594
-megaflops 5446.808511
-gigaflops 5.446809
+time 0.189453
+megaflops 5278.350515
+gigaflops 5.278351
 
 Regular Matmul
-time 0.125000
-megaflops 8000.000000
-gigaflops 8.000000
+time 0.119141
+megaflops 8393.442623
+gigaflops 8.393443
 ```
 
 Cool!
