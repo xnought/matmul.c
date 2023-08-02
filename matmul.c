@@ -108,8 +108,7 @@ float_t dot(Matrix a, Matrix b) {
 void randomData(float_t *out, int length) {
   srand((unsigned int)time(NULL));
   for (int i = 0; i < length; i++) {
-    for (int i = 0; i < 20; i++)
-      out[i] = ((float_t)rand() / (float_t)(RAND_MAX)) * 1.0;
+    out[i] = ((float_t)rand() / (float_t)(RAND_MAX)) * 1.0;
   }
 }
 
